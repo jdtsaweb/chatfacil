@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat en Línea</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f0f0f0;
+        }
+
+        header {
+            background-color: #0078d4;
+            padding: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            color: white;
+        }
+
+        .profile {
+            display: flex;
+            align-items: center;
+            cursor: pointer;
+        }
+
+        .profile img {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            margin-right: 10px;
+        }
+
+        #profile-info {
+            display: flex;
+            flex-direction: column;
+        }
+
+        #profile-info span {
+            font-size: 14px;
+        }
+
+        #menu {
+            font-size: 24px;
+            background-color: transparent;
+            border: none;
+            color: white;
+            cursor: pointer;
+        }
+
+        #menu-dropdown {
+            display: none;
+            position: absolute;
+            top: 50px;
+            right: 10px;
+            background-color: white;
+            color: #0078d4;
+            border-radius: 5px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            padding: 10px 0;
+        }
+
+        #menu-dropdown a {
+            display: block;
+            padding: 12px 20px;
+            text-decoration: none;
+            color: inherit;
+            border-bottom: 1px solid #f0f0f0;
+        }
+
+        #menu-dropdown a:last-child {
+            border-bottom: none;
+        }
+
+        #menu-dropdown a:hover {
+            background-color: #f0f0f0;
+        }
+
+        .chat-window {
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            height: 80vh;
+            overflow-y: auto;
+        }
+
+        #messages {
+            flex-grow: 1;
+            overflow-y: auto;
+        }
+
+        .message {
+            margin: 5px;
+            padding: 8px;
+            border-radius: 10px;
+        }
+
+        .sent {
+            background-color: #d3f8d3;
+            text-align: right;
+        }
+
+        .received {
+            background-color: #f1f1f1;
+            text-align: left;
+        }
+
+        .input-container {
+            display: flex;
+            width: 100%;
+        }
+
+        input[type="text"] {
+            padding: 10px;
+            width: 70%;
+            margin-bottom: 10px;
+            border-radius: 20px;
+            border: 1px solid #ccc;
+        }
+
+        button {
+            padding: 10px;
+            margin: 5px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            background-color: #0078d4;
+            color: white;
+        }
+
+        button:disabled {
+            background-color: #ccc;
+        }
+
+        .button-container {
+            display: flex;
+            justify-content: space-between;
+            width: 100%;
+        }
+
+        .button-container button {
+            width: 20%;
+        }
+
+        #end-call-btn {
+            display: none;
+            background-color: red;
+            color: white;
+        }
+
+        #video-container {
+            display: none;
+            position: relative;
+        }
+
+        #video-container video {
+            width: 100%;
+            height: auto;
+        }
+
+        #profile-pic-input {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+
+<header>
+    <div class="profile" onclick="openProfileMenu(event)">
+        <img src="default-avatar.jpg" alt="Imagen de perfil" id="profile-img" onclick="changeProfilePic(event)">
+        <div id="profile-info">
+            <span id="name" onclick="editProfile(event)">Juan Pérez</span>
+            <span id="status">En línea</span>
+        </div>
+    </div>
+    <button id="menu" onclick="toggleMenu(event)">☰</button>
+</header>
+
+<div id="menu-dropdown">
+    <a href="#" onclick="changeBackgroundColor('#f0f0f0')">Fondo Claro</a>
+    <a href="#" onclick="changeBackgroundColor('#333333')">Fondo Oscuro</a>
+</div>
+
+<div class="chat-window" id="chat-window">
+    <div id="messages"></div>
+    <div class="input-container">
+        <input type="text" id="message-input" placeholder="Escribe un mensaje..." onkeydown="checkEnter(event)">
+        <button id="send-btn" onclick="sendMessage()">Enviar</button>
+    </div>
+    <div class="button-container">
+        <button id="record-btn" onmousedown="startRecording()" onmouseup="stopRecording()">🎤</button>
+        <button id="location-btn" onclick="sendLocation()">📍</button>
+        <button id="call-btn" onclick="startCall()">📞 Llamada</button>
+        <button id="video-call-btn" onclick="startVideoCall()">📹 Videollamada</button>
+    </div>
+    <button id="end-call-btn" onclick="endCall()">Colgar llamada</button>
+    <div id="video-container"></div>
+</div>
+
+<input type="file" id="profile-pic-input" onchange="changeProfilePicHandler(event)">
+
+<script>
+    let isRecording = false;
+    let mediaRecorder;
+    let audioChunks = [];
+    let currentStream;
+    let videoStream;
+
+    // Cambiar Foto de Perfil
+    function changeProfilePic(event) {
+        document.getElementById('profile-pic-input').click();
+    }
+
+    // Cambiar la Imagen al Seleccionar un Archivo
+    function changeProfilePicHandler(event) {
+        const file = event.target.files[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                document.getElementById('profile-img').src = e.target.result;
+            };
+            reader.readAsDataURL(file);
+        }
+    }
+
+    // Editar Perfil
+    function editProfile() {
+        const newName = prompt("Editar nombre completo:", document.getElementById('name').textContent);
+        if (newName) {
+            document.getElementById('name').textContent = newName;
+        }
+    }
+
+    // Cambiar el Color de Fondo
+    function toggleMenu() {
+        const menu = document.getElementById('menu-dropdown');
+        menu.style.display = menu.style.display === 'block' ? 'none' : 'block';
+    }
+
+    function changeBackgroundColor(color) {
+        document.body.style.backgroundColor = color;
+        document.getElementById('menu-dropdown').style.display = 'none';
+    }
+
+    // Iniciar Grabación
+    function startRecording() {
+        if (isRecording) return;
+        navigator.mediaDevices.getUserMedia({ audio: true })
+            .then(stream => {
+                mediaRecorder = new MediaRecorder(stream);
+                mediaRecorder.ondataavailable = event => {
+                    audioChunks.push(event.data);
+                };
+                mediaRecorder.onstop = () => {
+                    const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+                    const audioUrl = URL.createObjectURL(audioBlob);
+                    const audio = new Audio(audioUrl);
+                    audio.play();
+                    let msgElement = document.createElement('div');
+                    msgElement.className = 'message sent';
+                    msgElement.innerHTML = `<audio controls><source src="${audioUrl}" type="audio/wav"></audio>`;
+                    document.getElementById('messages').appendChild(msgElement);
+                    audioChunks = [];
+                };
+                mediaRecorder.start();
+                isRecording = true;
+            }).catch(err => {
+                console.error("Error al acceder al micrófono: ", err);
+            });
+    }
+
+    // Detener Grabación
+    function stopRecording() {
+        if (!isRecording) return;
+        mediaRecorder.stop();
+        isRecording = false;
+    }
+
+    // Enviar Ubicación
+    function sendLocation() {
+        if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(position => {
+                const latitude = position.coords.latitude;
+                const longitude = position.coords.longitude;
+                const locationMessage = `Ubicación: <a href="https://www.google.com/maps?q=${latitude},${longitude}" target="_blank">Ver en Google Maps</a>`;
+                let msgElement = document.createElement('div');
+                msgElement.className = 'message sent';
+                msgElement.innerHTML = locationMessage;
+                document.getElementById('messages').appendChild(msgElement);
+            });
+        } else {
+            alert("La geolocalización no está disponible en este navegador.");
+        }
+    }
+
+    // Iniciar Llamada
+    function startCall() {
+        navigator.mediaDevices.getUserMedia({ audio: true })
+            .then(stream => {
+                currentStream = stream;
+                alert("Iniciando llamada...");
+                document.getElementById('end-call-btn').style.display = 'inline';
+            })
+            .catch(err => {
+                console.error("Error al acceder al micrófono: ", err);
+            });
+    }
+
+    // Terminar Llamada
+    function endCall() {
+        if (currentStream) {
+            currentStream.getTracks().forEach(track => track.stop());
+        }
+        document.getElementById('end-call-btn').style.display = 'none';
+        alert("Llamada terminada.");
+    }
+
+    // Iniciar Videollamada
+    function startVideoCall() {
+        navigator.mediaDevices.getUserMedia({ audio: true, video: true })
+            .then(stream => {
+                videoStream = stream;
+                const videoContainer = document.getElementById('video-container');
+                const videoElement = document.createElement('video');
+                videoElement.srcObject = stream;
+                videoElement.play();
+                videoContainer.appendChild(videoElement);
+                videoContainer.style.display = 'block';
+                alert("Iniciando videollamada...");
+                document.getElementById('end-call-btn').style.display = 'inline';
+            })
+            .catch(err => {
+                console.error("Error al acceder a la cámara o micrófono: ", err);
+            });
+    }
+
+    // Terminar Videollamada
+    function endCall() {
+        if (videoStream) {
+            videoStream.getTracks().forEach(track => track.stop());
+            document.getElementById('video-container').style.display = 'none';
+        }
+        document.getElementById('end-call-btn').style.display = 'none';
+        alert("Videollamada terminada.");
+    }
+
+    // Enviar Mensaje de Texto
+    function sendMessage() {
+        const message = document.getElementById('message-input').value;
+        if (message) {
+            const msgElement = document.createElement('div');
+            msgElement.className = 'message sent';
+            msgElement.textContent = message;
+            document.getElementById('messages').appendChild(msgElement);
+            document.getElementById('message-input').value = '';
+        }
+    }
+</script>
+
+</body>
+</html>
